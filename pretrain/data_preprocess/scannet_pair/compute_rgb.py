@@ -8,8 +8,8 @@ import torch
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import random_split
-import pytorch_lightning as pl
-
+import pytorch_lightning as pl_bolts
+from torch.nn import functional as F
 from torchvision import transforms as transforms
 
 from pl_bolts.models.self_supervised.simclr import SimCLREvalDataTransform, SimCLRTrainDataTransform
@@ -17,6 +17,10 @@ from pl_bolts.models.self_supervised import SimSiam, SimCLR, BYOL, SwAV
 from pl_bolts.transforms.dataset_normalizations import imagenet_normalization
 from pl_bolts.datamodules import CIFAR10DataModule
 from pl_bolts.datamodules.vision_datamodule import VisionDataModule
+from pl_bolts.callbacks.ssl_online import SSLOnlineEvaluator
+from pl_bolts.models.self_supervised.simsiam.models import SiameseArm
+from pl_bolts.models.self_supervised.resnets import resnet18, resnet50
+from pl_bolts.optimizers.lars_scheduling import LARSWrapper
 
 def _default_transforms():
         scannet_transforms = transforms.Compose([
@@ -56,7 +60,8 @@ class ScannetDataset(Dataset):
         if self.transform is not None:
             x_i = self.transform(img)
             x_j = self.transform(img)
-
+        #print(x_i)
+        #print(x_j)
         return x_i, x_j
 
 
@@ -139,6 +144,12 @@ class ScannetDataModule(LightningDataModule):
         ])
         return scannet_transforms
 
+def cosine_similarity(a, b):
+    b = b.detach()
+    a = F.normalize(a, dim=-1)
+    b = F.normalize(b, dim=-1)
+    sim = -1 * (a * b).sum(-1).mean()
+    return sim
 
 def main():
     #print(sorted(glob.glob('home/data' + '/*/')))
@@ -157,10 +168,41 @@ def main():
             jitter_strength=1.0,
             normalize=imagenet_normalization,
     )
+
+    # init 
+    backbone = resnet50
+    encoder = backbone(first_conv=True, maxpool1=True, return_all_feature_maps=False)
+    online_network = SiameseArm(
+            encoder, input_dim=2048, hidden_size=2048, output_dim=128
+    )
+
     
-    model = SimSiam(gpus=8, num_samples=2474251, batch_size=32, dataset='scannet')
+    train_dataloader = dm.train_dataloader()
+    val_dataloader = dm.val_dataloader()
+
+    #optimizer = torch.optim.SGD(online_network.params(), lr=0.001, momentum=0.9, weight_decay=0.0001)
+
+    for idx, (img1, img2) in enumerate(train_dataloader):
+        _, z1, h1 = online_network(img1)
+        _, z2, h2 = online_network(img2)
+        loss = cosine_similarity(h1, z2) / 2+cosine_similarity(h2, z1) / 2
+        #optimizer.step()
+
+        #print(idx)
+        #print(img1)
+        #print(img2)
+
+    model = SimSiam(gpus=8, num_samples=2474251, batch_size=32, dataset='scannet')  
+    online_evaluator = SSLOnlineEvaluator(
+            drop_p=0.0,
+            hidden_dim=None,
+            z_dim=2058,
+            num_classes=1000,
+            dataset='scannet'
+    )
+
     trainer = pl.Trainer()
-    trainer.fit(model, datamodule=dm)
+    trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=val_dataloader, datamodule=dm)
 
 if __name__=="__main__":
     main()
