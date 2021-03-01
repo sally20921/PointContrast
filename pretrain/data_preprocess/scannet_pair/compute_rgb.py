@@ -8,8 +8,13 @@ import torch
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import random_split
+import pytorch_lightning as pl
 
 from torchvision import transforms as transforms
+
+from pl_bolts.models.self_supervised.simclr import SimCLREvalDataTransform, SimCLRTrainDataTransform
+from pl_bolts.models.self_supervised import SimSiam
+from pl_bolts.transforms.dataset_normalizations import imagenet_normalization
 
 class ScannetDataset(Dataset):
 
@@ -27,12 +32,9 @@ class ScannetDataset(Dataset):
 
         """
         self.img_size = img_size
-        self.class_map = sorted(glob.glob(os.path.join('/home/data/scannet/scans', '*')))
-        #print(self.class_map)
-        self._imgs = []
-        for cls in self.class_map:
-            self._imgs.append(img for img in sorted(glob.glob(cls+'/color/*.jpg')))
 
+        self._imgs = sorted(glob.glob('/home/data/scannet/scans/'+'*/color/*.jpg'))
+        #print(self._imgs)
 
     def __len__(self):
         #print(len(self._imgs))
@@ -75,7 +77,7 @@ class ScannetDataModule(LightningDataModule):
         self.drop_last = drop_last
 
         scannet_dataset = ScannetDataset(data_dir='/home/data/scannet', transform=self._default_transforms())
-        print(val_split)
+        #print(val_split)
         print(len(scannet_dataset))
         val_len = round(float(val_split) * len(scannet_dataset))
         test_len = round(float(test_split) * len(scannet_dataset))
@@ -124,9 +126,25 @@ class ScannetDataModule(LightningDataModule):
 
 
 def main():
-    dm = ScannetDataModule('/home/data/scannet') 
-    model = SimSiam()
-    Trainer().fit(model, datamodule=dm)
+    #print(sorted(glob.glob('home/data' + '/*/')))
+    dm = ScannetDataModule('/home/data/scannet')
+    dm.train_transforms = SimCLRTrainDataTransform(
+            input_height= 968,
+            gaussian_blur=True,
+            jitter_strength=1.0,
+            normalize=imagenet_normalization,
+    )
+    dm.val_transforms = SimCLREvalDataTransform(
+            input_height=968,
+            gaussian_blur=True,
+            jitter_strength=1.0,
+            normalize=imagenet_normalization,
+    )
+
+
+    model = SimSiam(gpus=8, num_samples=2474251, batch_size=32, dataset='scannet')
+
+    pl.Trainer().fit(model, datamodule=dm)
 
 if __name__=="__main__":
     main()
