@@ -1,0 +1,11 @@
+num_classes: 1000
+learning_rate: 0.2
+weight_decay: 1.5e-06
+input_height: 32
+batch_size: 32
+num_workers: 0
+warmup_epochs: 10
+max_epochs: 1000
+gpus: 8
+num_samples: 2474251
+dataset: scannet

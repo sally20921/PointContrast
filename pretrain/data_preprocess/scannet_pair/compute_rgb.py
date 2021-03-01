@@ -13,8 +13,17 @@ import pytorch_lightning as pl
 from torchvision import transforms as transforms
 
 from pl_bolts.models.self_supervised.simclr import SimCLREvalDataTransform, SimCLRTrainDataTransform
-from pl_bolts.models.self_supervised import SimSiam
+from pl_bolts.models.self_supervised import SimSiam, SimCLR, BYOL, SwAV
 from pl_bolts.transforms.dataset_normalizations import imagenet_normalization
+from pl_bolts.datamodules import CIFAR10DataModule
+from pl_bolts.datamodules.vision_datamodule import VisionDataModule
+
+def _default_transforms():
+        scannet_transforms = transforms.Compose([
+            transforms.Resize((480,640)),
+            transforms.ToTensor(),
+        ])
+        return scannet_transforms
 
 class ScannetDataset(Dataset):
 
@@ -32,7 +41,7 @@ class ScannetDataset(Dataset):
 
         """
         self.img_size = img_size
-
+        self.transform = transform
         self._imgs = sorted(glob.glob('/home/data/scannet/scans/'+'*/color/*.jpg'))
         #print(self._imgs)
 
@@ -42,21 +51,24 @@ class ScannetDataset(Dataset):
 
     def __getitem__(self, idx):
         img = Image.open(self._imgs[idx])
-        img = np.array(img)
+        #img = np.array(img)
 
-        if self.transform:
-            img = self.transform(img)
+        if self.transform is not None:
+            x_i = self.transform(img)
+            x_j = self.transform(img)
 
-        return img
+        return x_i, x_j
 
 
 class ScannetDataModule(LightningDataModule):
     name = 'scannet'
+    dataset_cls = ScannetDataset
+    dim = (3, 480, 640)
     def __init__(self,
             data_dir: Optional[str] = None,
             val_split: float = 0.2,
             test_split: float = 0.1,
-            num_workers: int = 16,
+            num_workers: int = 4,
             batch_size: int= 32,
             seed: int = 42,
             shuffle: bool = True,
@@ -87,6 +99,7 @@ class ScannetDataModule(LightningDataModule):
             scannet_dataset, lengths=[train_len, val_len, test_len], generator=torch.Generator().manual_seed(self.seed))
 
     def train_dataloader(self) -> DataLoader:
+        
         loader = DataLoader(
                 self.trainset,
                 batch_size=self.batch_size,
@@ -121,30 +134,33 @@ class ScannetDataModule(LightningDataModule):
 
     def _default_transforms(self) -> Callable:
         scannet_transforms = transforms.Compose([
-            transforms.ToTensor(),
+                transforms.Resize((480,640)),
+                transforms.ToTensor(),
         ])
+        return scannet_transforms
 
 
 def main():
     #print(sorted(glob.glob('home/data' + '/*/')))
     dm = ScannetDataModule('/home/data/scannet')
+    #dm = CIFAR10DataModule(data_dir='/home/data', batch_size=32, num_workers=0, val_split=5000)
+    
     dm.train_transforms = SimCLRTrainDataTransform(
-            input_height= 968,
+            input_height= 640,
             gaussian_blur=True,
             jitter_strength=1.0,
             normalize=imagenet_normalization,
     )
     dm.val_transforms = SimCLREvalDataTransform(
-            input_height=968,
+            input_height=640,
             gaussian_blur=True,
             jitter_strength=1.0,
             normalize=imagenet_normalization,
     )
-
-
+    
     model = SimSiam(gpus=8, num_samples=2474251, batch_size=32, dataset='scannet')
-
-    pl.Trainer().fit(model, datamodule=dm)
+    trainer = pl.Trainer()
+    trainer.fit(model, datamodule=dm)
 
 if __name__=="__main__":
     main()
