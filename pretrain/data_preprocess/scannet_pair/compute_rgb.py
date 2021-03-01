@@ -8,7 +8,7 @@ import torch
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import random_split
-import pytorch_lightning as pl_bolts
+import pytorch_lightning as pl
 from torch.nn import functional as F
 from torchvision import transforms as transforms
 
@@ -62,7 +62,7 @@ class ScannetDataset(Dataset):
             x_j = self.transform(img)
         #print(x_i)
         #print(x_j)
-        return x_i, x_j
+        return (x_i, x_j, idx), idx
 
 
 class ScannetDataModule(LightningDataModule):
@@ -170,22 +170,22 @@ def main():
     )
 
     # init 
-    backbone = resnet50
-    encoder = backbone(first_conv=True, maxpool1=True, return_all_feature_maps=False)
-    online_network = SiameseArm(
-            encoder, input_dim=2048, hidden_size=2048, output_dim=128
-    )
+    #backbone = resnet50
+    #encoder = backbone(first_conv=True, maxpool1=True, return_all_feature_maps=False)
+    #online_network = SiameseArm(
+    #        encoder, input_dim=2048, hidden_size=2048, output_dim=128
+    #)
 
     
-    train_dataloader = dm.train_dataloader()
-    val_dataloader = dm.val_dataloader()
+    #train_dataloader = dm.train_dataloader()
+    #val_dataloader = dm.val_dataloader()
 
     #optimizer = torch.optim.SGD(online_network.params(), lr=0.001, momentum=0.9, weight_decay=0.0001)
 
-    for idx, (img1, img2) in enumerate(train_dataloader):
-        _, z1, h1 = online_network(img1)
-        _, z2, h2 = online_network(img2)
-        loss = cosine_similarity(h1, z2) / 2+cosine_similarity(h2, z1) / 2
+    #for idx, (img1, img2) in enumerate(train_dataloader):
+    #    _, z1, h1 = online_network(img1)
+    #    _, z2, h2 = online_network(img2)
+    #    loss = cosine_similarity(h1, z2) / 2+cosine_similarity(h2, z1) / 2
         #optimizer.step()
 
         #print(idx)
@@ -202,7 +202,7 @@ def main():
     )
 
     trainer = pl.Trainer()
-    trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=val_dataloader, datamodule=dm)
+    trainer.fit(model, datamodule=dm)
 
 if __name__=="__main__":
     main()
