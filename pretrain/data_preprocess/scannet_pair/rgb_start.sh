@@ -10,8 +10,8 @@ reader() {
 
     scene=$(basename -- "$filename")
     scene="${scene%.*}"
-    echo "Find sens data: $filename $scene"
-    python -u reader.py --filename $filename --output_path $TARGET_DIR/$scene --frame_skip $FRAME_SKIP --export_depth_images --export_color_images --export_poses --export_intrinsics
+    #echo "Find sens data: $filename $scene"
+    #python -u reader.py --filename $filename --output_path $TARGET_DIR/$scene --frame_skip $FRAME_SKIP --export_depth_images --export_color_images --export_poses --export_intrinsics
     echo "Extract point-cloud data"
     python -u point_cloud_extractor.py --input_path $TARGET_DIR/$scene --output_path $TARGET_DIR/$scene/pcd --save_npz
     echo "Compute partial scan overlapping"
