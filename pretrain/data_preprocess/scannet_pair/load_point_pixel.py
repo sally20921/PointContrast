@@ -29,54 +29,49 @@ def _default_transforms():
         ])
         return scannet_transforms
 
-class ScannetPairDataset(Dataset):
+class ScannetDataset(Dataset):
 
     IMAGE_PATH = os.path.join('/home/data', 'scannet')
-    scannet_match_dir = '/home/PointContrast/overlap-30-full.txt'
-    dataset_root_dir = '/home/data/scannet/scans'
-    voxel_size = 0.025
 
     def __init__(
             self,
-            phase='train', 
+            data_dir: str,
+            img_size: tuple = (1296, 968),
             transform=None,
-            random_rotation=True,
-            random_scale=True
-            ):
+    ):
+        """
+        data_dir
+        img_size = (1296, 968)
 
-        self.phase = phase
-        self.files = []
-        self.data_objects = []
+        """
+        self.img_size = img_size
         self.transform = transform
-        self.voxel_size = 0.025
-        self.matching_search_voxel_size = 0.025 * 1.5
-
-        self.random_scale = random_scale
-        self.min_scale = 0.8
-        self.max_scale = 1.2
-        self.random_rotation = random_rotation
-        self.rotation_range = 360
-        self.randg = np.random.RandomState()
+        self._imgs = sorted(glob.glob('/home/data/scannet/scans/'+'*/color/*.jpg'))
+        self._depths = sorted(glob.glob('/home/data/scannet/scans/'+'*/depth/*.png'))
         
-        self.root_filelist = '/home/PointContrast/overlap-30-full.txt'
-        self.root = '/home/data/scannet/scans'
-        fname_txt = self.root_filelist
-        with open(fname_txt) as f:
-            content = f.readlines()
-        fnames = [x.strip().split() for x in content]
-        for fname in fnames:
-            self.files.append([fname[0], fname[1]])
+        self._pcs = []
+        #print(self._imgs)
 
-        
     def __len__(self):
         #print(len(self._imgs))
         return len(self._imgs)
 
-    def __getitem__(self, idx): #/home/data/scannet/data_f25/scene
-        feed_dict={'pc': sparse_tensor, 'rgb': point_tensor}
-        return feed_dict
+    def __getitem__(self, idx):
+        img_path = self._imgs[idx]
+        depth_path = self._depths[idx]
+        img = Image.open(img_path)
+        depth = Image.open(depth)
+        #img = np.array(img)
+
+        if self.transform is not None:
+            x_i = self.transform(img)
+            x_j = self.transform(img)
+            d_i = self.transform(depth)
+            d_j = self.transform(depth)
+            
         
-        
+        return x_i, x_j, d_i, d_j
+
 
 class ScannetDataModule(LightningDataModule):
     name = 'scannet'
